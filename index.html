@@ -194,7 +194,7 @@ function qView(r){
     step=`<div class="card"><h3>2. ${Q.to}번에게 질문하기 (${n}/${MAXQ})</h3>${body}</div>`;
   }
   return `<div class="card"><h2>🎯 ${r}라운드 · 질문하는 친구 ${S.seat}번</h2>
-    <p class="muted">${rowTxt(S.seat)} 친구 → ${rowTxt(tr)} 친구에게 물어봐요.</p>
+    <p class="muted">${rowTxt(S.seat)} 친구 → ${tr+1}행 친구에게 물어봐요.</p>
     <div class="guide"><div class="en">❓ How often do you ______?</div><div class="en">🗣️ I ______ ______ a ______.</div></div>
     <p>빙고 ${L}/3줄 완성</p>
     <div class="grid">${cells.map(k=>`<div class="cell ${Q.hit[k]?'hit':''}">${cellTxt(k)}</div>`).join('')}</div>
