@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Speaking Bingo</title>
+<style>
+:root{--bg:#EAF5F0;--paper:#fff;--ink:#16362F;--muted:#557269;--line:#C9E2D9;--mint:#14967B;--mint-soft:#D3F0E7;--coral:#EE6346;--coral-soft:#FDE2DA;--sun:#F2B035;--sun-soft:#FFF0CC;--sky:#3B82C4;--sky-soft:#DCEBF8;--ok:#23915A;--ok-soft:#DDF4E6;--bad:#C9402F;--bad-soft:#FBE1DC}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif;font-size:16px;line-height:1.5;padding:0 14px 48px;max-width:980px;margin-inline:auto}
+header{position:sticky;top:0;z-index:10;background:var(--bg);padding:12px 0 8px;border-bottom:2px dashed var(--line)}
+h1{font-size:22px;margin:0 0 6px}
+h2{font-size:20px;margin:0 0 8px}
+h3{font-size:17px;margin:12px 0 6px}
+button{font:inherit;color:inherit;cursor:pointer;border:2px solid var(--line);background:#fff;border-radius:12px;padding:8px 12px;margin:2px}
+button:disabled{opacity:.45;cursor:default}
+button.main{background:var(--mint);border-color:var(--mint);color:#fff}
+button.coral{background:var(--coral);border-color:var(--coral);color:#fff}
+button.on{border-color:var(--mint);background:var(--mint-soft)}
+.card{background:var(--paper);border:2px solid var(--line);border-radius:16px;padding:14px;margin:10px 0}
+.en{font-family:'Nunito','Segoe UI',Arial,sans-serif;font-weight:800}
+.guide{background:var(--sun-soft);border:2px solid var(--sun);border-radius:14px;padding:10px 12px;margin:8px 0;font-size:17px}
+.muted{color:var(--muted);font-size:14px}
+.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.cell{min-height:78px;border-radius:12px;border:2px solid var(--line);background:#fff;display:grid;place-items:center;text-align:center;font-size:13px;padding:4px}
+.cell.hit{background:var(--coral);border-color:var(--coral);color:#fff}
+.seatmap{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;max-width:460px;margin:0 auto}
+.seat{aspect-ratio:1.4;padding:0;font-weight:800;font-family:'Nunito',Arial,sans-serif}
+.seat.empty{background:repeating-linear-gradient(45deg,#fff,#fff 6px,var(--line) 6px,var(--line) 9px);color:var(--muted)}
+.seat.me{background:var(--coral);border-color:var(--coral);color:#fff}
+.board{grid-column:1/-1;text-align:center;background:var(--line);border-radius:8px;padding:6px;font-size:14px}
+.codein{font-size:28px;letter-spacing:.2em;text-align:center;width:260px;max-width:100%;padding:8px;border:3px solid var(--sky);border-radius:12px;font-family:'Nunito',Arial,sans-serif;font-weight:800;display:block;margin:10px auto}
+.codebig{font-family:'Nunito',Arial,sans-serif;font-weight:900;font-size:56px;letter-spacing:.14em}
+.meter{height:14px;border-radius:999px;background:var(--bg);border:2px solid var(--line);overflow:hidden}
+.meter span{display:block;height:100%;background:linear-gradient(90deg,var(--sun),var(--coral))}
+.tile{font-family:'Nunito',Arial,sans-serif;font-weight:800;font-size:20px;min-width:44px;background:var(--sky-soft);border-color:var(--sky)}
+.tile.used{opacity:.25}
+.slots{min-height:52px;display:flex;flex-wrap:wrap;gap:6px;padding:8px;border-radius:12px;border:2px dashed var(--line);background:var(--bg);margin:8px 0}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 18px;border-radius:12px;z-index:80;font-size:15px;max-width:calc(100% - 32px);text-align:center}
+details summary{cursor:pointer;font-weight:800;padding:4px 0}
+</style>
+</head>
+<body>
+<header>
+  <h1>🗣️ Speaking Bingo</h1>
+  <nav class="row" id="rail"></nav>
+</header>
+<main id="app"></main>
+
+<script>
+/* ===================== 설정 ===================== */
+const COLS=5,ROWS=4,SEATS=20,MAXABS=6,SEEDS=40,MAXQ=3,PT=10,GOAL=150,TRIES=3;
+const H=[
+  {id:'brush',ko:'이 닦기',emo:'🪥',unit:'day',me:'brush my teeth',you:'brush your teeth',kw:'TEETH'},
+  {id:'wash',ko:'손 씻기',emo:'🧼',unit:'day',me:'wash my hands',you:'wash your hands',kw:'HANDS'},
+  {id:'exercise',ko:'운동하기',emo:'🏃',unit:'week',me:'exercise',you:'exercise',kw:'EXERCISE'},
+  {id:'walk',ko:'산책하기',emo:'🚶',unit:'week',me:'take a walk',you:'take a walk',kw:'WALK'},
+  {id:'bike',ko:'자전거 타기',emo:'🚲',unit:'week',me:'ride a bike',you:'ride a bike',kw:'BIKE'},
+  {id:'shower',ko:'샤워하기',emo:'🚿',unit:'week',me:'take a shower',you:'take a shower',kw:'SHOWER'}
+];
+const HB=Object.fromEntries(H.map(h=>[h.id,h]));
+const NAMES=['Jenny','Minsu','Jia','Junho','Sua','Taeyun','Haeun','Seojun'];
+const UNIT_WORD=['once','twice','three times'];
+const fq=(n,u)=>`${UNIT_WORD[n-1]} a ${u}`;
+const sayI=(h,n)=>`I ${h.me} ${fq(n,h.unit)}.`;
+const askH=h=>`How often do you ${h.you}?`;
+const esc=s=>String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const rowOf=n=>Math.floor((n-1)/COLS);
+const rowTxt=n=>`${rowOf(n)+1}행`;
+const rowSeats=r=>[1,2,3,4,5].map(k=>r*COLS+k);
+const isQ=(seat,r)=>(r===1?[0,1]:[2,3]).includes(rowOf(seat));
+const targetRow=seat=>(rowOf(seat)+2)%4;
+
+/* ===================== 난수 / 셔플 ===================== */
+function rng(seed){let a=seed>>>0;return()=>{a=a+0x6D2B79F5>>>0;let t=a;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296}}
+function shuffle(a,R){for(let i=a.length-1;i>0;i--){const j=Math.floor(R()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+const rnd=a=>a[Math.floor(Math.random()*a.length)];
+const shuf=a=>shuffle(a.slice(),Math.random);
+
+/* ===================== 입장 코드 (Health Detective와 같은 방식) ===================== */
+const COMBOS=(()=>{const out=[];for(let k=0;k<=MAXABS;k++){const rec=(s,acc)=>{if(acc.length===k){out.push(acc.slice());return}for(let i=s;i<=SEATS;i++){acc.push(i);rec(i+1,acc);acc.pop()}};rec(1,[])}return out})();
+const RANK=new Map(COMBOS.map((c,i)=>[c.join(','),i]));
+function luhn(s){let sum=0,dbl=true;for(let i=s.length-1;i>=0;i--){let d=+s[i];if(dbl){d*=2;if(d>9)d-=9}sum+=d;dbl=!dbl}return(10-sum%10)%10}
+function makeCode(absent,seed){const r=RANK.get(absent.slice().sort((a,b)=>a-b).join(','));const base=String(100+r*SEEDS+seed);return base+luhn(base)}
+function readCode(c){c=String(c).replace(/\D/g,'');if(c.length<4)return null;const base=c.slice(0,-1);if(luhn(base)!==+c.slice(-1))return null;
+  const b=+base-100;if(b<0)return null;const r=Math.floor(b/SEEDS);if(r>=COMBOS.length)return null;return{code:c,base:b,seed:b%SEEDS,absent:COMBOS[r]}}
+const spaced=c=>c.length>4?c.slice(0,c.length-3)+' '+c.slice(-3):c;
+
+/* ===================== 주민 카드 (모든 기기가 같은 결과를 계산) ===================== */
+const CACHE={cards:null,boards:{}};
+function G_cards(G){
+  if(CACHE.cards&&CACHE.cards.base===G.base)return CACHE.cards.map;
+  const map={};
+  for(let s=1;s<=SEATS;s++){
+    if(G.absent.includes(s))continue;
+    const R=rng(G.base*1009+s*131+17);
+    const idx=shuffle(NAMES.map((_,i)=>i),R).slice(0,3);
+    map[s]=idx.map(i=>({name:NAMES[i],vals:Object.fromEntries(H.map(h=>[h.id,1+Math.floor(R()*3)]))}));
+  }
+  CACHE.cards={base:G.base,map};
+  return map;
+}
+/* 질문하는 친구의 빙고판: 상대 행 주민 카드에 있는 습관·빈도 조합에서 16칸 */
+function board(G,seat,r){
+  const key=`${G.base}-${seat}-${r}`;
+  if(CACHE.boards[key])return CACHE.boards[key];
+  const cards=G_cards(G),tr=targetRow(seat),facts=new Set();
+  rowSeats(tr).forEach(s=>(cards[s]||[]).forEach(c=>H.forEach(h=>facts.add(h.id+'|'+c.vals[h.id]))));
+  let arr=[...facts];
+  if(arr.length<4)arr=H.flatMap(h=>[1,2,3].map(n=>h.id+'|'+n));
+  shuffle(arr,rng(G.base*7919+seat*53+r*11));
+  const cells=[];for(let i=0;i<16;i++)cells.push(arr[i%arr.length]);
+  return CACHE.boards[key]=cells;
+}
+function cellTxt(k){const [id,n]=k.split('|');const h=HB[id];return `${h.emo}<br>${h.ko}<br><span class="en">${UNIT_WORD[+n-1]} a ${h.unit}</span>`}
+function lines(hit,cells){const L=[];for(let i=0;i<4;i++){L.push([0,1,2,3].map(c=>i*4+c));L.push([0,1,2,3].map(rr=>rr*4+i))}L.push([0,5,10,15],[3,6,9,12]);return L.filter(l=>l.every(i=>hit[cells[i]]))}
+
+/* ===================== 음성 ===================== */
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+function norm(t){return t.toLowerCase().replace(/[^a-z0-9' ]/g,' ').replace(/\s+/g,' ').trim().split(' ').filter(Boolean).map(w=>w.replace(/'/g,''))}
+function score(exp,got){const a=norm(exp),b=norm(got),n=a.length,m=b.length;if(!n)return 0;
+  const dp=Array.from({length:n+1},()=>Array(m+1).fill(0));
+  for(let i=n-1;i>=0;i--)for(let j=m-1;j>=0;j--)dp[i][j]=a[i]===b[j]?dp[i+1][j+1]+1:Math.max(dp[i+1][j],dp[i][j+1]);
+  return dp[0][0]/n}
+function listen(expected,onDone){
+  if(!SR){toast('이 브라우저는 음성 인식을 지원하지 않아요. (Chrome을 써 주세요)');onDone(0,'');return}
+  try{speechSynthesis.cancel()}catch(e){}
+  const r=new SR();r.lang='en-US';r.interimResults=false;r.maxAlternatives=1;
+  let fin=false;const finish=(sc,said)=>{if(fin)return;fin=true;onDone(sc,said)};
+  r.onresult=e=>{const t=e.results[0][0].transcript;finish(score(expected,t),t)};
+  r.onerror=()=>finish(0,'');
+  r.onend=()=>finish(0,'');
+  try{r.start()}catch(e){finish(0,'')}
+}
+function speak(t){if(!('speechSynthesis' in window)){toast('읽어 주기를 지원하지 않아요.');return}
+  speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.lang='en-US';u.rate=.88;speechSynthesis.speak(u)}
+
+/* ===================== 상태 (저장하지 않음) ===================== */
+const S={seat:null,codeIn:'',G:null,view:'join',tAbs:[],tSeed:Math.floor(Math.random()*SEEDS),Q:{},P:{},sc:null};
+const QS=r=>S.Q[r]||(S.Q[r]={to:null,habit:null,asked:{},hit:{}});
+const PS=r=>S.P[r]||(S.P[r]={score:0,pending:0,card:null,habit:null,tries:0,hint:false,msg:'',listening:false,quiz:null,qPicked:null,quizOK:0,quizN:0});
+function newQuiz(cards){const c=rnd(cards),h=rnd(H),n=c.vals[h.id];return{sentence:sayI(h,n),ans:c.name,opts:shuf(cards.map(x=>x.name))}}
+function newScramble(){const word=rnd(H).kw;let letters=word.split('');do{shuffle(letters,Math.random)}while(letters.join('')===word);return{word,pool:letters,placed:[],msg:'',done:false}}
+
+/* ===================== 화면 ===================== */
+const app=document.getElementById('app');
+function toast(m){const t=document.createElement('div');t.className='toast';t.textContent=m;document.body.appendChild(t);setTimeout(()=>t.remove(),2600)}
+function seatMap(fn){let h='<div class="seatmap">';for(let r=ROWS-1;r>=0;r--)for(let c=COLS-1;c>=0;c--)h+=fn(r*COLS+c+1);return h+'<div class="board">칠판 (앞)</div></div>'}
+
+function render(){
+  const rail=document.getElementById('rail');
+  if(location.hash==='#teacher'){rail.innerHTML='';app.innerHTML=teacher();return}
+  if(!S.G){rail.innerHTML='';app.innerHTML=join();return}
+  rail.innerHTML=[1,2].map(r=>`<button class="${S.view==='r'+r?'on':''}" data-act="view" data-v="r${r}">${r}라운드 · ${isQ(S.seat,r)?'🎯 질문':'🗣️ 대답'}</button>`).join('')+
+    `<button class="${S.view==='quiet'?'on':''}" data-act="view" data-v="quiet">🤫 조용한 활동</button><button data-act="leave">나는 ${S.seat}번 · 바꾸기</button>`;
+  if(S.view==='quiet')app.innerHTML=quiet();
+  else{const r=+S.view[1];app.innerHTML=isQ(S.seat,r)?qView(r):rView(r)}
+}
+
+function join(){
+  const g=readCode(S.codeIn),conflict=g&&S.seat&&g.absent.includes(S.seat),ready=g&&S.seat&&!conflict;
+  return `<div class="card"><h2>① 내 자리를 눌러요</h2>
+    ${seatMap(n=>{const ab=g&&g.absent.includes(n);return `<button class="seat ${S.seat===n?'me':''} ${ab?'empty':''}" data-act="seat" data-n="${n}">${n}</button>`})}
+    <p class="muted" style="text-align:center">${S.seat?`${S.seat}번 자리를 골랐어요.`:'자리를 눌러 주세요.'}</p></div>
+  <div class="card"><h2>② 칠판의 입장 코드를 입력해요</h2>
+    <input class="codein" data-in="code" inputmode="numeric" autocomplete="off" maxlength="8" value="${esc(S.codeIn)}" placeholder="0000">
+    ${g?`<p class="muted" style="text-align:center">✅ 코드 확인 · 참가 ${SEATS-g.absent.length}명</p>`:''}
+    ${conflict?`<p style="text-align:center;color:var(--bad)">${S.seat}번은 빈자리로 되어 있어요. 선생님께 확인하세요.</p>`:''}
+    <div style="text-align:center"><button class="main" data-act="enter" ${ready?'':'disabled'} style="font-size:18px;padding:12px 24px">🗣️ 시작!</button></div>
+    <p class="muted" style="text-align:center">🔒 이름이나 기록을 저장하지 않아요. 창을 닫으면 사라져요.</p></div>`;
+}
+
+/* ---------- 질문하는 친구 ---------- */
+function qView(r){
+  const G=S.G,cells=board(G,S.seat,r),Q=QS(r),L=lines(Q.hit,cells).length,tr=targetRow(S.seat);
+  const targets=rowSeats(tr).filter(s=>!G.absent.includes(s));
+  let step='';
+  if(Q.to){
+    const n=Q.asked[Q.to]||0;
+    let body='';
+    if(n>=MAXQ)body=`<p>${Q.to}번에게는 질문을 모두 했어요. 다른 친구를 골라요.</p>`;
+    else if(Q.habit){
+      const h=HB[Q.habit];
+      body=`<div class="row"><span class="en">${askH(h)}</span><button data-act="say" data-t="${esc(askH(h))}">🔊</button></div>
+        <p class="muted">${Q.to}번의 대답을 듣고, 들린 문장을 눌러요.</p>
+        <div class="row">${[1,2,3].map(k=>`<button class="en" data-act="qheard" data-r="${r}" data-n="${k}">${sayI(h,k)}</button>`).join('')}</div>
+        <button data-act="qmiss" data-r="${r}">못 들었어요</button>`;
+    }else{
+      body=`<p class="muted">먼저 <span class="en">What's your name?</span> 로 이름을 물어봐도 좋아요 (질문 횟수에 안 세요).</p>
+        <div class="row">${H.map(h=>`<button data-act="qh" data-r="${r}" data-h="${h.id}">${h.emo} ${h.ko}</button>`).join('')}</div>`;
+    }
+    step=`<div class="card"><h3>2. ${Q.to}번에게 질문하기 (${n}/${MAXQ})</h3>${body}</div>`;
+  }
+  return `<div class="card"><h2>🎯 ${r}라운드 · 질문하는 친구 ${S.seat}번</h2>
+    <p class="muted">${rowTxt(S.seat)} 친구 → ${rowTxt(tr)} 친구에게 물어봐요.</p>
+    <div class="guide"><div class="en">❓ How often do you ______?</div><div class="en">🗣️ I ______ ______ a ______.</div></div>
+    <p>빙고 ${L}/3줄 완성</p>
+    <div class="grid">${cells.map(k=>`<div class="cell ${Q.hit[k]?'hit':''}">${cellTxt(k)}</div>`).join('')}</div>
+    ${L>=3?`<p><b>🎉 빙고 완성!</b></p><button class="main" data-act="view" data-v="quiet">🤫 조용한 활동으로 가기</button>`:''}</div>
+  <div class="card"><h3>1. 친구 고르기</h3>
+    <div class="row">${targets.map(s=>`<button class="${Q.to===s?'on':''}" data-act="qto" data-r="${r}" data-n="${s}" ${(Q.asked[s]||0)>=MAXQ?'disabled':''}>${s}번 (${Q.asked[s]||0}/${MAXQ})</button>`).join('')}</div>
+    <p class="muted">${targets.length?'':'상대 행에 친구가 없어요. 선생님께 말해요.'}</p></div>${step}`;
+}
+
+/* ---------- 대답하는 친구 ---------- */
+function rView(r){
+  const G=S.G,cards=G_cards(G)[S.seat]||[],P=PS(r);
+  if(!P.quiz&&cards.length)P.quiz=newQuiz(cards);
+  const pct=Math.min(100,Math.round(P.score/GOAL*100));
+  const cardHtml=cards.map((c,i)=>`<details ${i===0?'open':''}><summary class="en">📇 카드 ${i+1} · ${c.name}</summary>
+    ${H.map(h=>{const t=sayI(h,c.vals[h.id]);return `<div class="row"><span class="en" style="flex:1">${h.emo} ${t}</span><button data-act="say" data-t="${esc(t)}">🔊</button></div>`}).join('')}</details>`).join('');
+  let ans='';
+  if(P.pending>0){
+    let inner=`<p class="muted">① 카드 고르기 → ② 질문 받은 습관 고르기 → ③ 🎤 말하기</p>
+      <div class="row">${cards.map((c,i)=>`<button class="en ${P.card===i?'on':''}" data-act="pcard" data-r="${r}" data-i="${i}">${c.name}</button>`).join('')}</div>`;
+    if(P.card!==null){
+      inner+=`<div class="row">${H.map(h=>`<button class="${P.habit===h.id?'on':''}" data-act="phab" data-r="${r}" data-h="${h.id}">${h.emo} ${h.ko}</button>`).join('')}</div>`;
+    }
+    if(P.card!==null&&P.habit){
+      const c=cards[P.card],h=HB[P.habit],t=sayI(h,c.vals[h.id]);
+      inner+=P.hint?`<div class="guide en">${t}</div>`:`<button data-act="phint" data-r="${r}">👀 힌트 보기</button>`;
+      inner+=`<div class="row"><button class="main" data-act="pmic" data-r="${r}" ${P.listening?'disabled':''}>🎤 ${P.listening?'듣고 있어요…':'말하기'}</button></div>`;
+    }
+    if(P.msg)inner+=`<p>${P.msg}</p>`;
+    ans=`<div class="card"><h3>🎤 대답하기 (대답 대기 ${P.pending}개)</h3>${inner}</div>`;
+  }else{
+    ans=`<div class="card"><p class="muted">친구가 질문하면 아래 🙋 버튼을 눌러 주세요. 대답 한 번에 +${PT}점.</p></div>`;
+  }
+  const q=P.quiz;
+  const quiz=q?`<div class="card"><h3>🧠 기다리는 퀴즈 (+${PT}점)</h3>
+    <p class="muted">이 문장은 누구의 카드일까요?</p>
+    <div class="guide en">${q.sentence}</div>
+    <div class="row">${q.opts.map(o=>`<button class="en" data-act="quizpick" data-r="${r}" data-name="${o}" ${P.qPicked!==null?'disabled':''}>${o}</button>`).join('')}</div>
+    ${P.qPicked!==null?`<p>${P.qPicked===q.ans?'⭕ 정답! +'+PT+'점':'❌ 아쉬워요! 정답은 '+q.ans}</p><button data-act="quiznext" data-r="${r}">다음 문제 →</button>`:''}</div>`:'';
+  return `<div class="card"><h2>🗣️ ${r}라운드 · 대답하는 친구 ${S.seat}번</h2>
+    <div class="row" style="justify-content:space-between"><b>🏅 점수 ${P.score}/${GOAL}</b></div>
+    <div class="meter"><span style="width:${pct}%"></span></div>
+    ${P.score>=GOAL?'<p><b>🎉 미션 성공!</b></p>':''}
+    <p><button data-act="gotq" data-r="${r}">🙋 질문 받았어요 (+1)</button></p></div>
+    ${ans}${quiz}
+    <div class="card"><h3>내 카드 3장</h3>${cardHtml}</div>`;
+}
+
+/* ---------- 조용한 활동: 워드 스크램블 ---------- */
+function quiet(){
+  if(!S.sc)S.sc=newScramble();
+  const s=S.sc;
+  const slots=s.placed.map((pi,k)=>`<button class="tile" data-act="sc_unpick" data-k="${k}">${s.pool[pi]}</button>`).join('');
+  const pool=s.pool.map((ch,i)=>`<button class="tile ${s.placed.includes(i)?'used':''}" data-act="sc_pick" data-k="${i}" ${s.placed.includes(i)?'disabled':''}>${ch}</button>`).join('');
+  return `<div class="card"><h2>🤫 워드 스크램블</h2>
+    <p class="muted">친구들을 기다리는 동안 혼자 조용히 해요. 소리 내지 않아요.</p>
+    <p class="muted">습관 이야기 단어예요. 글자를 순서대로 눌러 단어를 만들어요.</p>
+    <div class="slots">${slots||'<span class="muted">아래 글자를 눌러 주세요</span>'}</div>
+    <div class="row">${pool}</div>
+    <div class="row"><button class="main" data-act="sc_check">✔ 확인</button><button data-act="sc_next">다음 단어 ↻</button></div>
+    <p>${s.msg}</p></div>`;
+}
+
+/* ---------- 선생님 화면 ---------- */
+function teacher(){
+  const code=makeCode(S.tAbs,S.tSeed);
+  return `<div class="card"><h2>🧑‍🏫 선생님 화면</h2>
+    <p class="muted">빈자리를 누르면 코드가 바뀌어요. 이 화면을 TV에 띄워 주세요.</p>
+    ${seatMap(n=>`<button class="seat ${S.tAbs.includes(n)?'empty':''}" data-act="tabs" data-n="${n}">${n}</button>`)}
+    <p class="muted" style="text-align:center">참가 ${SEATS-S.tAbs.length}명${S.tAbs.length?` · 빈자리 ${S.tAbs.slice().sort((a,b)=>a-b).join(', ')}번`:''}</p>
+    <div style="text-align:center"><p class="muted">입장 코드</p><div class="codebig">${spaced(code)}</div>
+    <button data-act="tseed">🎲 새 사건 만들기</button></div></div>
+  <div class="card"><h3>역할</h3>
+    <p>1라운드: 1·2행 친구가 질문 → 3·4행 친구가 대답</p>
+    <p>2라운드: 3·4행 친구가 질문 → 1·2행 친구가 대답</p>
+    <p class="muted">라운드 시간(7분)과 조용한 활동 시간은 선생님이 직접 관리해요.</p></div>`;
+}
+
+/* ===================== 이벤트 ===================== */
+document.addEventListener('click',e=>{const b=e.target.closest('[data-act]');if(!b||b.disabled)return;act(b.dataset.act,b.dataset)});
+document.addEventListener('input',e=>{const t=e.target;if(t.dataset.in==='code'){S.codeIn=t.value.replace(/\D/g,'');const p=t.selectionStart;render();const el=document.querySelector('[data-in="code"]');if(el){el.focus();try{el.setSelectionRange(p,p)}catch(x){}}}});
+addEventListener('hashchange',render);
+addEventListener('beforeunload',e=>{if(location.hash!=='#teacher'&&S.G){e.preventDefault();e.returnValue=''}});
+
+function act(a,d){
+  const r=+d.r;
+  switch(a){
+  case'seat':S.seat=+d.n;render();break;
+  case'enter':{const g=readCode(S.codeIn);if(!g||!S.seat||g.absent.includes(S.seat))return;S.G=g;S.view='r1';S.Q={};S.P={};S.sc=null;render();scrollTo(0,0);break}
+  case'leave':S.G=null;S.view='join';render();break;
+  case'view':S.view=d.v;render();scrollTo(0,0);break;
+  case'say':speak(d.t);break;
+
+  /* 질문하는 친구 */
+  case'qto':QS(r).to=+d.n;QS(r).habit=null;render();break;
+  case'qh':{const Q=QS(r);Q.asked[Q.to]=(Q.asked[Q.to]||0)+1;Q.habit=d.h;render();break}
+  case'qheard':{const Q=QS(r),key=Q.habit+'|'+d.n,cells=board(S.G,S.seat,r);
+    if(cells.includes(key)){Q.hit[key]=true;toast('⭕ 빙고 칸을 표시했어요!')}else toast('빙고판에 없는 대답이에요.');
+    Q.habit=null;render();break}
+  case'qmiss':QS(r).habit=null;render();break;
+
+  /* 대답하는 친구 */
+  case'gotq':PS(r).pending++;render();break;
+  case'pcard':{const P=PS(r);P.card=+d.i;P.habit=null;P.tries=0;P.hint=false;P.msg='';render();break}
+  case'phab':{const P=PS(r);P.habit=d.h;P.tries=0;P.hint=false;P.msg='';render();break}
+  case'phint':PS(r).hint=true;render();break;
+  case'pmic':{
+    const P=PS(r),c=(G_cards(S.G)[S.seat]||[])[P.card],h=HB[P.habit];
+    if(!c||!h)return;
+    const exp=sayI(h,c.vals[h.id]);
+    P.listening=true;P.msg='';render();
+    listen(exp,(sc,said)=>{
+      const P2=PS(r);P2.listening=false;P2.tries++;
+      if(sc>=0.7){P2.score+=PT;P2.pending--;P2.msg=`⭕ Great! +${PT}점`;P2.card=null;P2.habit=null;P2.tries=0}
+      else if(P2.tries>=TRIES){P2.score+=PT;P2.pending--;P2.msg=`⏭ ${TRIES}번 도전 후 자동 통과! +${PT}점`;P2.card=null;P2.habit=null;P2.tries=0}
+      else{P2.hint=true;P2.msg=`🔁 한 번 더! (${P2.tries}/${TRIES})${said?` 들린 말: "${esc(said)}"`:''}`}
+      render();
+    });
+    break}
+  case'quizpick':{const P=PS(r);if(P.qPicked!==null)break;P.qPicked=d.name;P.quizN++;if(d.name===P.quiz.ans){P.quizOK++;P.score+=PT}render();break}
+  case'quiznext':{const P=PS(r),cards=G_cards(S.G)[S.seat]||[];P.quiz=newQuiz(cards);P.qPicked=null;render();break}
+
+  /* 조용한 활동 */
+  case'sc_pick':S.sc.placed.push(+d.k);S.sc.msg='';render();break;
+  case'sc_unpick':S.sc.placed.splice(+d.k,1);S.sc.msg='';render();break;
+  case'sc_check':{const s=S.sc,txt=s.placed.map(i=>s.pool[i]).join('');
+    if(txt===s.word){s.msg='✅ 맞았어요! 다음 단어에 도전해요.';s.done=true}else s.msg='❌ 다시 해 봐요.';render();break}
+  case'sc_next':S.sc=newScramble();render();break;
+
+  /* 선생님 */
+  case'tabs':{const n=+d.n,i=S.tAbs.indexOf(n);
+    if(i>=0)S.tAbs.splice(i,1);else{if(S.tAbs.length>=MAXABS){toast(`빈자리는 ${MAXABS}자리까지 표시할 수 있어요.`);return}S.tAbs.push(n)}
+    render();break}
+  case'tseed':S.tSeed=(S.tSeed+1+Math.floor(Math.random()*(SEEDS-1)))%SEEDS;render();break;
+  }
+}
+render();
+</script>
+</body>
+</html>
